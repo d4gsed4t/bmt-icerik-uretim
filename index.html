@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BMT Post Üretici</title>
+<meta name="description" content="ETÜ BMT paylaşımlarını kimliğe birebir uygun üretir.">
+<meta name="theme-color" content="#14123A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="ikon/ikon-192.png">
+<link rel="apple-touch-icon" href="ikon/ikon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BMT Post">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+  // Tema, sayfa çizilmeden önce: yanıp sönme olmasın
+  try { const t = localStorage.getItem('bmt-tema'); if (t === 'acik' || t === 'koyu') document.documentElement.dataset.theme = t; } catch {}
+</script>
+<link rel="stylesheet" href="css/sablon.css">
+<link rel="stylesheet" href="css/uygulama.css">
+</head>
+<body>
+<header class="ust">
+  <div class="marka-ad">
+    <img id="ust-logo" src="marka/v1-eski/eski-logo.svg" alt="" width="34" height="34">
+    <div><b>BMT Post Üretici</b><span id="marka-bilgi">Marka yükleniyor…</span></div>
+  </div>
+  <nav class="sekmeler" aria-label="Bölümler">
+    <button type="button" data-sekme="uret" aria-current="page">Üret</button>
+    <button type="button" data-sekme="denetim">Denetim</button>
+  </nav>
+  <div class="tema" role="group" aria-label="Tema">
+    <button type="button" data-tema="sistem" title="Sistem teması">Sistem</button>
+    <button type="button" data-tema="acik" title="Açık tema">Açık</button>
+    <button type="button" data-tema="koyu" title="Koyu tema">Koyu</button>
+  </div>
+</header>
+
+<main id="uret" class="uret">
+  <section class="sahne" aria-label="Önizleme">
+    <div id="surum-uyari" class="surum-uyari" hidden></div>
+    <div id="sayfalar" class="segment sayfalar" role="tablist" aria-label="Sayfalar" hidden></div>
+    <div class="onizleme-cerceve"><div id="onizleme" class="onizleme"></div></div>
+    <ul id="uyarilar" class="uyarilar" aria-live="polite"></ul>
+    <div class="kaydet-cubuk">
+      <button type="button" id="kaydet" class="birincil" disabled>Hazırlanıyor…</button>
+      <span id="kaydet-not" class="not"></span>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <section>
+      <h2>Şablon</h2>
+      <div id="aileler" class="segment aileler" role="tablist" aria-label="Aile"></div>
+      <div id="sablonlar" class="sablonlar" role="radiogroup" aria-label="Şablon"></div>
+      <p id="sablon-ne" class="not"></p>
+    </section>
+    <section id="varyant-bolum" hidden>
+      <h2 id="varyant-baslik">Rol</h2>
+      <div id="varyantlar" class="segment" role="radiogroup"></div>
+    </section>
+    <section id="yuz-bolum">
+      <h2>Yüz</h2>
+      <div id="yuzler" class="segment" role="radiogroup" aria-label="Yüz"></div>
+    </section>
+    <section>
+      <h2>İçerik</h2>
+      <form id="form" class="form" autocomplete="off"></form>
+      <p class="not">Yazdıkların bu cihazda taslak olarak saklanır. Fotoğraf taslağa kaydedilmez.</p>
+      <button type="button" id="sifirla" class="ikincil">Örnek içeriğe dön</button>
+    </section>
+    <section id="toplu-bolum" hidden>
+      <h2>Toplu çıktı</h2>
+      <p class="not">Her satıra bir isim yaz ya da listeden yapıştır. Hepsi tek PDF'te, her sayfada bir sertifika (A4 yatay, baskı kalitesi).</p>
+      <label class="alan"><span><span>İsim listesi</span><small id="toplu-say"></small></span><textarea id="toplu-liste" rows="6" lang="tr"></textarea></label>
+      <label class="secim"><input type="checkbox" id="toplu-no" checked><span>Belge numarasını sırayla artır (ilk numara yukarıdaki alandan)</span></label>
+      <button type="button" id="toplu-indir" class="birincil" disabled>PDF oluştur</button>
+      <p id="toplu-durum" class="not"></p>
+    </section>
+  </aside>
+</main>
+
+<main id="denetim" class="denetim" hidden>
+  <header>
+    <h2>Yayın öncesi denetim</h2>
+    <p>Her şablonu her yüzle seçili marka sürümünde çizer ve kitin kendi denetim yöntemiyle ölçer: yazı logoya, fotoğrafa, QR'a ya da başka yazıya biniyor mu, tuvalden taşıyor mu, başlık sığıyor mu. Yeni logo yayına bu ekran temizken alınır.</p>
+    <label>Marka sürümü <select id="denetim-surum"></select></label>
+    <p id="denetim-ozet" class="ozet"></p>
+    <div class="yonetim">
+      <section class="kutu-panel">
+        <h3>Kit</h3>
+        <p>Kitin logoya bağlı klasörlerini (01-logo, 08 yazısız zeminler, 09 örnekler) seçili sürümle bu uygulamadan üretir; ayrıca bir program gerekmez. Bilgisayardan yap: dosya büyük.</p>
+        <button type="button" id="kit-indir" class="ikincil">Kiti indir (ZIP)</button>
+        <p id="kit-durum" class="not"></p>
+      </section>
+      <section class="kutu-panel">
+        <h3>Yeni logo dene</h3>
+        <p>Yeni bir logoyu yayına almadan önce bütün şablonlarda dene. Denetim temizse marka paketini indir ve yayındaki <code>marka</code> klasörünü onunla değiştir.</p>
+        <form id="yeni-logo" class="form">
+          <label class="alan"><span><span>Sürümün adı</span></span><input type="text" name="ad" maxlength="30" placeholder="ör. 2027 logosu" required></label>
+          <label class="alan"><span><span>Koyu zemin logosu (SVG ya da saydam PNG)</span></span><input type="file" name="koyu" accept="image/svg+xml,image/png" required></label>
+          <label class="alan"><span><span>Açık zemin logosu (isteğe bağlı)</span></span><input type="file" name="acik" accept="image/svg+xml,image/png"></label>
+          <label class="secim"><input type="checkbox" name="rozet" checked><span>Açık ve alarm zemininde koyu logoyu gece rozetin içine al (açık zemin logosu yoksa)</span></label>
+          <label class="alan"><span><span>Logo yüksekliği (standart şablonda, px)</span></span><input type="number" name="boy" min="60" max="220" value="128"></label>
+          <label class="alan"><span><span>Geçiş tarihi (boşsa bekler)</span></span><input type="date" name="tarih"></label>
+          <div class="foto-dugmeler"><button type="submit" class="ikincil">Dene ve denetle</button><button type="button" id="marka-paketi" class="ikincil" disabled>Marka paketini indir</button></div>
+          <p id="yeni-durum" class="not"></p>
+        </form>
+      </section>
+    </div>
+  </header>
+  <div id="denetim-sonuc" class="denetim-sonuc"></div>
+</main>
+
+<div id="cizim" class="cizim" aria-hidden="true"></div>
+<script type="module" src="js/uygulama.js"></script>
+</body>
+</html>

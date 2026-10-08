@@ -1,0 +1,73 @@
+{
+  "aciklama": "BMT marka sürümleri. Aktif sürüm: başlangıç tarihi bugünü geçmiş en yeni sürüm. Tarihi boş olan sürüm bekler. Geri dönmek için yeni sürümün tarihini sil. oran: şablonun istediği kilit boyuna (px) göre logo yüksekliği (yükseklik = round(kilit × oran)). rozet: açık ve alarm yüzünde logo Gece renkli yuvarlak rozetin içinde, CSS ile çizilir (Python kitiyle aynı): iç boşluk round(h × pay), köşe round(h × yaricap), toplam = h + 2·boşluk. genislik_orani: logonun en/boy oranı (img genişliği = round(h × oran)). profil: profil fotoğrafı gibi yalnız işaretin geldiği yerler (sabit yükseklik; yuzler verilmezse sürümün kendi yüz dosyaları).",
+  "kulup": "ETÜ Bilgisayar Mühendisliği Topluluğu",
+  "slogan": "Kodla öğren, birlikte üret.",
+  "surumler": [
+    {
+      "id": "v1-eski",
+      "ad": "Kulüp logosu",
+      "baslangic": "2020-01-01",
+      "yuzler": {
+        "a": {
+          "dosya": "v1-eski/eski-logo.svg"
+        },
+        "b": {
+          "dosya": "v1-eski/eski-logo.svg",
+          "rozet": {
+            "pay": 0.13,
+            "yaricap": 0.2,
+            "renk": "#14123A"
+          }
+        },
+        "alarm": {
+          "dosya": "v1-eski/eski-logo.svg",
+          "rozet": {
+            "pay": 0.13,
+            "yaricap": 0.2,
+            "renk": "#14123A"
+          }
+        },
+        "saygi": {
+          "dosya": "v1-eski/eski-logo-gri.svg"
+        }
+      },
+      "oran": 1.45,
+      "profil": {
+        "yukseklik": 760
+      },
+      "genislik_orani": 0.9980506822612085
+    },
+    {
+      "id": "v2-bmt",
+      "ad": "<BMT> işareti",
+      "baslangic": null,
+      "yuzler": {
+        "a": {
+          "dosya": "v2-bmt/kilit-koyu-zemin.png"
+        },
+        "b": {
+          "dosya": "v2-bmt/kilit-acik-zemin.png"
+        },
+        "alarm": {
+          "dosya": "v2-bmt/kilit-acik-zemin.png"
+        },
+        "saygi": {
+          "dosya": "v2-bmt/kilit-koyu-zemin.png",
+          "filtre": true
+        }
+      },
+      "oran": 1.04545,
+      "profil": {
+        "yukseklik": 620,
+        "yuzler": {
+          "a": {
+            "dosya": "v2-bmt/isaret-renkli-koyu-zemin.svg"
+          },
+          "b": {
+            "dosya": "v2-bmt/isaret-renkli-acik-zemin.svg"
+          }
+        }
+      }
+    }
+  ]
+}
