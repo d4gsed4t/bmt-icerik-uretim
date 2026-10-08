@@ -1,11 +1,14 @@
 // Ölçüm: yazıyı alana sığdırmak ve yayından önce çakışma denetimi.
 // İkisi de gerçek ölçüde (ölçeksiz) çizilmiş tuval üzerinde çalışır.
 
+// Kutulu çocuklar: kutusuz sarmalayıcıların (display:contents, serbest postun parça işareti) içi açılır
+const kutular = el => [...el.children].flatMap(c => (getComputedStyle(c).display === 'contents' ? kutular(c) : [c]));
+
 // İçerik tuvalin iç alanından taşıyor mu? (.ic flex sütun; boşluklar sıfırlanınca içerik alttan taşar)
 function tasiyor(yy) {
   const ic = yy.querySelector('.ic'), r = ic.getBoundingClientRect(), st = getComputedStyle(ic);
   const alt = r.bottom - parseFloat(st.paddingBottom) + 1;
-  return [...ic.children].some(c => c.getBoundingClientRect().bottom > alt);
+  return kutular(ic).some(c => c.getBoundingClientRect().bottom > alt);
 }
 
 // Görünen satır sayısı: kendiliğinden kırılan satırlar dahil.
@@ -96,7 +99,7 @@ export function tasarimDenetle(yy) {
     for (const pp of [el, ...el.querySelectorAll('.pp')].filter(x => x.classList?.contains('pp'))) { const q = pp.getBoundingClientRect(); ekle(new DOMRect(q.left - 19, q.top - 19, q.width + 38, q.height + 38)); }
     return b;
   };
-  const ogeler = [...ic.children].filter(el => !bos(el)).map(el => ({ el, b: gorunur(el) }));
+  const ogeler = kutular(ic).filter(el => !bos(el)).map(el => ({ el, b: gorunur(el) }));
   const TASARIM_AD = [['.logo-yuva', 'logo'], ['.kaydir-y', 'sayfa noktaları'], ['.kisi-y, .pp', 'kişi'], ['.dev-y', 'dev başlık'], ['.rakam', 'dev rakam'],
     ['.bas-o', 'başlık'], ['.galeri-y', 'galeri'], ['.foto-t', 'fotoğraf'], ['.qr', 'QR'], ['.kod2', 'kod kartı'], ['.liste-y', 'liste'], ['.stat-y', 'istatistik'],
     ['.ikon-dev', 'ikon satırı'], ['.ayrac-y', 'ayraç'], ['.satir', 'bilgi satırı'], ['.buton', 'düğme'], ['.hap', 'etiket'], ['.genis', 'küçük başlık'], ['.ince', 'açıklama']];
@@ -114,4 +117,13 @@ export function tasarimDenetle(yy) {
   }
   for (const o of ogeler) if (o.b.left < sol - 2 || o.b.right > sag + 2) sorunlar.push(`${ad(o.el)} kenar boşluğuna taşıyor: küçült`);
   return sorunlar;
+}
+
+// Bir parçanın ekrandaki sınırı (kutusuz sarmalayıcıysa içindeki kutuların birleşimi): önizlemedeki seçim çerçevesi için
+export function parcaSiniri(el) {
+  const k = getComputedStyle(el).display === 'contents' ? kutular(el) : [el];
+  const r = k.map(x => x.getBoundingClientRect()).filter(q => q.width || q.height);
+  if (!r.length) return null;
+  const sol = Math.min(...r.map(q => q.left)), ust = Math.min(...r.map(q => q.top));
+  return new DOMRect(sol, ust, Math.max(...r.map(q => q.right)) - sol, Math.max(...r.map(q => q.bottom)) - ust);
 }

@@ -168,14 +168,16 @@ export const HIZALAR = ['sol', 'orta', 'sag'];
 // üst boşluk: -1 yakın (yarı), 0 kitin aralığı, 1 geniş (iki kat), 2 alta it (bu parça ve sonrası alta oturur)
 export const ARA_ADLARI = { '-1': 'Yakın', 0: 'Normal', 1: 'Geniş', 2: 'Alta it' };
 const boyOf = x => { const [a, b] = BOY_ARALIGI[x.tur] ?? [0, 0]; return Math.min(b, Math.max(a, x.boy ?? 0)); };
-// Varsayılandaki parça kitin çizimiyle birebir kalır (sarmalayıcı yok); ayarlıysa sarmalayıcı hizalar ve ölçekler.
+// Varsayılandaki parça kitin çizimiyle birebir kalır (kutusuz sarmalayıcı, display:contents: yalnız önizlemede
+// dokunulan parçayı bulmak için data-parca işareti taşır); ayarlıysa sarmalayıcı hizalar ve ölçekler.
 // Büyütme sığdırmadan önce (zoom: sığmazsa sığdırma geri alır), küçültme sonra (data-zoom: sığdırılmış hâli küçülür;
 // yoksa zaten genişliğe sığdırılmış dev başlıkta küçültme görünmezdi). data-zoom'u olcum.js/sigdir uygular.
-function sar(x, html, { boy = true, hiza = true } = {}) {
+function sar(x, html, { boy = true, hiza = true, isaret = true } = {}) {
   const k = boy ? BOY[boyOf(x)] : 1, h = hiza && !TAM_GENIS.has(x.tur) && HIZALAR.includes(x.hiza) ? x.hiza : 'orta';
-  if (k === 1 && h === 'orta') return html;
+  const id = isaret ? ` data-parca="${esc(x.id)}"` : '';
+  if (k === 1 && h === 'orta') return isaret ? `<div${id} style="display:contents">${html}</div>` : html;
   const ai = { sol: 'flex-start', orta: 'center', sag: 'flex-end' }[h], ta = { sol: 'left', orta: 'center', sag: 'right' }[h];
-  return `<div class="sp" style="flex:none;align-self:stretch;display:flex;flex-direction:column;align-items:${ai};text-align:${ta}${k > 1 ? `;zoom:${k}` : ''}"${k < 1 ? ` data-zoom="${k}"` : ''}>${html}</div>`;
+  return `<div class="sp"${id} style="flex:none;align-self:stretch;display:flex;flex-direction:column;align-items:${ai};text-align:${ta}${k > 1 ? `;zoom:${k}` : ''}"${k < 1 ? ` data-zoom="${k}"` : ''}>${html}</div>`;
 }
 // Sayfadaki alt çapanın başladığı yer: ilk "alta it" parçası ya da sondaki bilgi satırı/düğmeler
 export function altBaslangic(parcalar) {
@@ -206,7 +208,7 @@ function dizi(parcalar, v, b) {
     if (i) html += bosluk(Math.round(aralik(parcalar[i - 1].tur, x.tur) * ({ '-1': 0.5, 1: 2 }[x.ara] ?? 1)));
     if (x.tur === 'ikon') {   // grubun hizası ilk ikon satırından, boyutu her satırın kendinden
       let j = i; while (j + 1 < parcalar.length && parcalar[j + 1].tur === 'ikon') j++;
-      html += sar(x, `<div style="display:grid;gap:28px;justify-items:start">${parcalar.slice(i, j + 1).map(y => sar(y, PARCALAR.ikon.ciz(y, v, b), { hiza: false })).join('')}</div>`, { boy: false });
+      html += sar(x, `<div style="display:grid;gap:28px;justify-items:start">${parcalar.slice(i, j + 1).map(y => sar(y, PARCALAR.ikon.ciz(y, v, b), { hiza: false })).join('')}</div>`, { boy: false, isaret: false });
       i = j; continue;
     }
     html += sar(x, PARCALAR[x.tur].ciz(x, v, b));

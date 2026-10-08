@@ -3,7 +3,7 @@
 import { markaYukle, aktifSurum, surumBul, logolariOnYukle, dosyaYolu } from './marka.js';
 import { AILELER, SABLONLAR, ornekDegerler, kardesler, degerAnahtari, istegeBagliAlanlar } from './sablonlar.js';
 import { cizimYap, kucukGoster, bekle } from './cizim.js';
-import { tasarimDenetle } from './olcum.js';
+import { tasarimDenetle, parcaSiniri } from './olcum.js';
 import { pngYap, kaydet } from './yakala.js';
 import { pdfYap, jpegYap, zipYap } from './paket.js';
 import { kitUret } from './kit.js';
@@ -82,6 +82,27 @@ function onizle() {
   const cerceve = $('.onizleme-cerceve');
   olcek = kucukGoster(c.yy, $('#onizleme'), cerceve.clientWidth, telefon() ? innerHeight * 0.62 : innerHeight - 240);
   sayfaSekmeleri();
+  secimCiz();
+}
+
+// ---------------------------------------------------------------- serbest post: önizlemede parça seçimi
+// Önizlemede bir parçaya dokununca seçilir: çevresinde ince çerçeve, altında o parçanın ayar çubuğu; masaüstünde klavye.
+let secili = null, secimEylem = null;   // seçili parçanın kimliği; ayar işlevleri (sayfa düzenleyicisi her kurulumda yeniler)
+function secimCiz() {
+  const on = $('#onizleme');
+  on.querySelector('.secim-cerceve')?.remove();
+  if (!secili || !taban().sayfaUret) return;
+  // aynı kimlik iç içe olabilir (ikon grubu): en içteki
+  const el = [...on.querySelectorAll(`[data-parca="${CSS.escape(secili)}"]`)].pop(), r = el && parcaSiniri(el);
+  if (!r) return;
+  const o = on.getBoundingClientRect(), pay = 6;
+  on.appendChild(Object.assign(document.createElement('div'), { className: 'secim-cerceve' }));
+  Object.assign(on.lastChild.style, { left: `${r.left - o.left - pay}px`, top: `${r.top - o.top - pay}px`, width: `${r.width + 2 * pay}px`, height: `${r.height + 2 * pay}px` });
+}
+function parcaSec(id) {
+  secili = id;
+  formKur();                               // kartın vurgusu ve ayar çubuğu
+  secimCiz();
 }
 
 function uyarilariGoster() {
@@ -279,6 +300,7 @@ function formKur() {
   const istege = taban().sayfaUret ? new Set() : new Set(sayfalar().flatMap(x => [...istegeBagliAlanlar(x)]));
   const gizli = (taslak.gizli ??= {})[anahtar()] ??= {};
   $('#serbest-aktar').hidden = !!taban().sayfaUret;
+  if (!taban().sayfaUret) { secili = null; secimEylem = null; $('#secim').hidden = true; }
   form.replaceChildren();
   let ucli = null;   // tarih · saat · yer tek satırda, şablondaki yerinde
   if (!alanlar().length) form.appendChild(Object.assign(document.createElement('p'), { className: 'not', textContent: 'Bu şablonda yazı yok: yüzü (ve varsa konuyu) seçip kaydet.' }));
@@ -388,11 +410,14 @@ function sayfaDuzenleyici(alan, deger) {
     const kart = Object.assign(document.createElement('div'), { className: 'parca' });
     kart.innerHTML = `<div class="parca-ust"><b></b><span><button type="button" data-y aria-label="Yukarı taşı">↑</button><button type="button" data-a aria-label="Aşağı taşı">↓</button><button type="button" data-s aria-label="Parçayı sil">✕</button></span></div>`;
     kart.querySelector('b').textContent = `${i + 1}. ${tur.ad}`;
+    if (p.id === secili) kart.classList.add('secili');
+    kart.dataset.parca = p.id;
+    kart.querySelector('b').onclick = () => parcaSec(p.id === secili ? null : p.id);
     kart.querySelector('[data-y]').disabled = i === 0;
     kart.querySelector('[data-a]').disabled = i === parcalar.length - 1;
     kart.querySelector('[data-y]').onclick = () => { [parcalar[i - 1], parcalar[i]] = [parcalar[i], parcalar[i - 1]]; yeniden(); };
     kart.querySelector('[data-a]').onclick = () => { [parcalar[i + 1], parcalar[i]] = [parcalar[i], parcalar[i + 1]]; yeniden(); };
-    kart.querySelector('[data-s]').onclick = () => { parcalar.splice(i, 1); fotoSil(p.id); yeniden(); };
+    kart.querySelector('[data-s]').onclick = () => { if (p.id === secili) secili = null; parcalar.splice(i, 1); fotoSil(p.id); yeniden(); };
     kart.appendChild(parcaAyari(p, i, parcalar, kaydet, yeniden));
     for (const f of tur.alanlar) {
       if (f.tur === 'secim') {
@@ -423,6 +448,7 @@ function sayfaDuzenleyici(alan, deger) {
     if (p.tur === 'galeri') for (const n of tur.fotolar(p)) kart.appendChild(fotoAlani({ ad: `blok-${p.id}-${n}`, etiket: `${n}. fotoğraf`, tur: 'foto' }));
     kap.appendChild(kart);
   }
+  secimKur(parcalar, kaydet, yeniden);
   if (parcalar.length < EN_FAZLA_PARCA) {
     const ekle = Object.assign(document.createElement('div'), { className: 'parca-ekle' });
     ekle.innerHTML = '<span class="ipucu">Parça ekle:</span>';
@@ -433,6 +459,50 @@ function sayfaDuzenleyici(alan, deger) {
   return kap;
 }
 
+// Önizlemenin altındaki seçim çubuğu: seçili parçanın adı, ayarları (kartla aynı), sırada taşıma, karta git, seçimi kaldır.
+// Klavye (masaüstü, yazı alanında değilken): ↑ ↓ sıra · ← → hiza · + − boyut · Shift+↑ ↓ boşluk · Esc seçimi kaldır.
+function secimKur(parcalar, kaydet, yeniden) {
+  const cubuk = $('#secim'), i = parcalar.findIndex(x => x.id === secili);
+  if (i < 0) { secili = null; secimEylem = null; cubuk.hidden = true; cubuk.replaceChildren(); return; }
+  const p = parcalar[i], tur = PARCALAR[p.tur];
+  const tasi = d => { const j = i + d; if (j < 0 || j >= parcalar.length) return; [parcalar[i], parcalar[j]] = [parcalar[j], parcalar[i]]; yeniden(); };
+  const [bmin, bmax] = BOY_ARALIGI[p.tur] ?? [0, 0], k = altBaslangic(parcalar);
+  const sinirla = (v, a, b) => Math.min(b, Math.max(a, v));
+  const yaz = (ad, yeni) => { if (yeni === 0 || yeni === 'orta') delete p[ad]; else p[ad] = yeni; yeniden(); };
+  secimEylem = {
+    tasi,
+    boy: d => { const y = sinirla((p.boy ?? 0) + d, bmin, bmax); if (y !== (p.boy ?? 0)) yaz('boy', y); },
+    hiza: d => { if (TAM_GENIS.has(p.tur)) return; const y = HIZALAR[sinirla(HIZALAR.indexOf(p.hiza ?? 'orta') + d, 0, 2)]; if (y !== (p.hiza ?? 'orta')) yaz('hiza', y); },
+    ara: d => { if (i === 0 || (i === k && p.ara !== 2)) return; const y = sinirla((p.ara ?? 0) + d, -1, 2); if (y !== (p.ara ?? 0)) yaz('ara', y); },
+  };
+  const kart = () => document.querySelector(`.parca[data-parca="${CSS.escape(p.id)}"]`);
+  const bas = Object.assign(document.createElement('div'), { className: 'secim-bas' });
+  bas.append(Object.assign(document.createElement('b'), { textContent: `${i + 1}. ${tur.ad}` }),
+    dugme('↑', () => tasi(-1), 'ayar-d'), dugme('↓', () => tasi(1), 'ayar-d'),
+    dugme('Yazıyı düzenle', () => { const c = kart(); c?.scrollIntoView({ block: 'center', behavior: 'smooth' }); c?.querySelector('input, textarea, select')?.focus({ preventScroll: true }); }, 'ikincil'),
+    dugme('✕', () => parcaSec(null), 'ayar-d'));
+  const [yuk, asa, , kapat] = bas.querySelectorAll('button');
+  yuk.setAttribute('aria-label', 'Yukarı taşı'); yuk.disabled = i === 0;
+  asa.setAttribute('aria-label', 'Aşağı taşı'); asa.disabled = i === parcalar.length - 1;
+  kapat.setAttribute('aria-label', 'Seçimi kaldır');
+  cubuk.replaceChildren(bas, parcaAyari(p, i, parcalar, kaydet, yeniden));
+  if (!dokunmatik()) cubuk.appendChild(Object.assign(document.createElement('span'), { className: 'ipucu', textContent: 'Klavye: ↑ ↓ sıra · ← → hiza · + − boyut · Shift + ↑ ↓ boşluk · Esc' }));
+  cubuk.hidden = false;
+}
+function klavyeKur() {
+  document.addEventListener('keydown', e => {
+    if (!secili || !secimEylem || $('#uret').hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    const eylem = {
+      ArrowUp: () => (e.shiftKey ? secimEylem.ara(-1) : secimEylem.tasi(-1)), ArrowDown: () => (e.shiftKey ? secimEylem.ara(1) : secimEylem.tasi(1)),
+      ArrowLeft: () => secimEylem.hiza(-1), ArrowRight: () => secimEylem.hiza(1),
+      '+': () => secimEylem.boy(1), '=': () => secimEylem.boy(1), '-': () => secimEylem.boy(-1), '_': () => secimEylem.boy(-1),
+      Escape: () => parcaSec(null),
+    }[e.key] ?? { NumpadAdd: () => secimEylem.boy(1), NumpadSubtract: () => secimEylem.boy(-1) }[e.code];   // sayısal tuş takımı
+    if (eylem) { e.preventDefault(); eylem(); }
+  });
+}
+
 // Parçanın ölçülü ayarı: boyut − / +, hiza ← · →, üst boşluk − / + (son kademe "alta it"), varsayılana dön.
 // Değerler kademe: kitin dışına çıkan piksel ayarı yok; sınırda düğme pasif.
 function parcaAyari(p, i, parcalar, kaydet, yeniden) {
@@ -441,7 +511,8 @@ function parcaAyari(p, i, parcalar, kaydet, yeniden) {
   const kucuk = (metin, etiket, tik, kapali) => { const d = dugme(metin, tik, 'ayar-d'); d.setAttribute('aria-label', etiket); d.title = etiket; d.disabled = kapali; return d; };
   const deger = t => Object.assign(document.createElement('span'), { className: 'ayar-deger', textContent: t });
   // ara "alta it"e geçince ya da ondan çıkınca alt çapa değişir: form yeniden kurulur (diğer kartların düğmeleri güncellensin)
-  const degis = (ad, yeni, yapi = false) => { if (yeni === 0 || (ad === 'hiza' && yeni === 'orta')) delete p[ad]; else p[ad] = yeni; yapi ? yeniden() : (kaydet(), yenile()); };
+  // her değişiklik formu ve önizlemeyi yeniden kurar: parça kartı ile önizlemedeki seçim çubuğu hep aynı durumu gösterir
+  const degis = (ad, yeni) => { if (yeni === 0 || (ad === 'hiza' && yeni === 'orta')) delete p[ad]; else p[ad] = yeni; yeniden(); };
 
   const [bmin, bmax] = BOY_ARALIGI[p.tur] ?? [0, 0], boy = () => Math.min(bmax, Math.max(bmin, p.boy ?? 0));
   const hizaVar = !TAM_GENIS.has(p.tur) && !(p.tur === 'ikon' && parcalar[i - 1]?.tur === 'ikon');   // ikon grubunun hizası ilk satırdan
@@ -458,8 +529,8 @@ function parcaAyari(p, i, parcalar, kaydet, yeniden) {
         kucuk('←', 'Sola kaydır', () => degis('hiza', HIZALAR[sira - 1]), sira <= 0), deger({ sol: 'Sol', orta: 'Orta', sag: 'Sağ' }[hiza()]), kucuk('→', 'Sağa kaydır', () => degis('hiza', HIZALAR[sira + 1]), sira >= 2)));
     }
     if (araVar) ay.append(grup('Üstteki boşluk',
-      kucuk('−', 'Boşluğu azalt', () => degis('ara', ara() - 1, ara() === 2), ara() <= -1), deger(`Boşluk: ${ARA_ADLARI[ara()]}`), kucuk('+', 'Boşluğu artır', () => degis('ara', ara() + 1, ara() === 1), ara() >= 2)));
-    if (p.boy || p.hiza || p.ara) ay.append(kucuk('Varsayılan', 'Boyut, hiza ve boşluğu varsayılana döndür', () => { const yapi = p.ara === 2; delete p.boy; delete p.hiza; delete p.ara; yapi ? yeniden() : (kaydet(), yenile()); }, false));
+      kucuk('−', 'Boşluğu azalt', () => degis('ara', ara() - 1), ara() <= -1), deger(`Boşluk: ${ARA_ADLARI[ara()]}`), kucuk('+', 'Boşluğu artır', () => degis('ara', ara() + 1), ara() >= 2)));
+    if (p.boy || p.hiza || p.ara) ay.append(kucuk('Varsayılan', 'Boyut, hiza ve boşluğu varsayılana döndür', () => { delete p.boy; delete p.hiza; delete p.ara; yeniden(); }, false));
   }
   yenile();
   return ay;
@@ -615,6 +686,15 @@ function suruklemeKur() {
   });
   const birak = () => { if (iz) { iz = null; ciz(); } };
   on.addEventListener('pointerup', birak); on.addEventListener('pointercancel', birak);
+  // serbest post: kıpırdamadan bırakılan dokunuş parçayı seçer (6 px'ten fazla hareket sürüklemedir)
+  let dokunus = null;
+  on.addEventListener('pointerdown', e => { dokunus = { x: e.clientX, y: e.clientY, hedef: e.target }; }, true);
+  on.addEventListener('pointerup', e => {
+    const d = dokunus; dokunus = null;
+    if (!d || !taban().sayfaUret || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
+    const el = d.hedef.closest?.('[data-parca]');
+    parcaSec(el ? (el.dataset.parca === secili ? null : el.dataset.parca) : null);
+  });
 }
 
 // ---------------------------------------------------------------- denetim ekranı
@@ -759,7 +839,7 @@ function temaKur() {
 
 // ---------------------------------------------------------------- başlat
 async function basla() {
-  temaKur(); sekmeKur(); suruklemeKur();
+  temaKur(); sekmeKur(); suruklemeKur(); klavyeKur();
   marka = await markaYukle();
   aktif = aktifSurum(marka);
   await logolariOnYukle(aktif);

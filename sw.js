@@ -1,6 +1,6 @@
 // Çevrimdışı açılış: uygulama kabuğu önbellekte. Her istek önce ağdan denenir,
 // böylece yeni logo sürümü ve şablon güncellemesi herkese kendiliğinden ulaşır; ağ yoksa son bilinen hâl kullanılır.
-const SURUM = 'bmt-post-14';
+const SURUM = 'bmt-post-15';
 const KABUK = ['./', 'index.html', 'manifest.webmanifest', 'css/sablon.css', 'css/uygulama.css',
   'js/uygulama.js', 'js/marka.js', 'js/sablonlar.js', 'js/zemin.js', 'js/olcum.js', 'js/yakala.js',
   'js/paket.js', 'js/cizim.js', 'js/kit.js', 'js/sablon/ortak.js', 'js/sablon/etkinlik.js', 'js/sablon/ekip.js', 'js/sablon/platform.js', 'js/sablon/tarif.js', 'js/sablon/serbest.js', 'js/sablon/ikonlar.js', 'vendor/snapdom.mjs', 'vendor/qrcode.mjs',
