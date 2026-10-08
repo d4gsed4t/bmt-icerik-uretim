@@ -3,10 +3,11 @@
 import { markaYukle, aktifSurum, surumBul, logolariOnYukle, dosyaYolu } from './marka.js';
 import { AILELER, SABLONLAR, ornekDegerler, kardesler, degerAnahtari, istegeBagliAlanlar } from './sablonlar.js';
 import { cizimYap, kucukGoster, bekle } from './cizim.js';
+import { tasarimDenetle } from './olcum.js';
 import { pngYap, kaydet } from './yakala.js';
 import { pdfYap, jpegYap, zipYap } from './paket.js';
 import { kitUret } from './kit.js';
-import { SERBEST, BICIMLER, PARCALAR, PARCA_ILK, EN_FAZLA_PARCA, EN_FAZLA_SAYFA, BASLANGICLAR, baslangicSayfalari, sayfalarOf, anaGorselFazlasi } from './sablon/serbest.js';
+import { SERBEST, BICIMLER, PARCALAR, PARCA_ILK, EN_FAZLA_PARCA, EN_FAZLA_SAYFA, BASLANGICLAR, baslangicSayfalari, sayfalarOf, anaGorselFazlasi, BOY_ARALIGI, BOY_ADLARI, TAM_GENIS, HIZALAR, ARA_ADLARI, altBaslangic } from './sablon/serbest.js';
 
 const $ = s => document.querySelector(s);
 const YUZ_AD = { a: 'Koyu', b: 'Açık', alarm: 'Alarm', saygi: 'Saygı', foto: 'Fotoğraf' };
@@ -92,6 +93,8 @@ function uyarilariGoster() {
     const on = cok ? `${i + 1}. sayfa: ` : '';
     for (const el of c.sigmayan) li.push(['hata', `${on}${el.classList.contains('dev-y') ? 'Dev başlık' : 'Yazı'} sığmıyor: kısalt ya da satırlara böl.`]);
     for (const s of c.sorunlar) li.push(['', `${on}Yerleşim: ${s}. Metni kısalt.`]);
+    // serbest post: çakışma yokken göze batanlar (yakınlık, boş sayfa, kenar); öneri, engel değil
+    if (taban().id === 'serbest' && !c.sorunlar.length && !c.sigmayan.length) for (const s of tasarimDenetle(c.yy)) li.push(['bilgi', `${on}${s}.`]);
     const k = [...c.yy.querySelectorAll('[data-oran]')].find(e => +e.dataset.oran < 1);
     if (k && !c.sigmayan.length) li.push(['', `${on}Yazı sığsın diye %${Math.round((1 - k.dataset.oran) * 100)} küçültüldü.`]);
   }
@@ -173,7 +176,7 @@ async function sablonKartlari() {
 }
 
 function sablonSec(id) {
-  if (id !== 'serbest') aktarimNotu = '';
+  if (id !== 'serbest') { aktarimNotu = ''; geriAl = null; }
   sablon = SABLONLAR.find(s => s.id === id);
   taslak.sablon = id; kaydetTaslak();
   document.querySelectorAll('.sablon-kart').forEach(k => k.setAttribute('aria-checked', String(k.dataset.anahtar === anahtar())));
@@ -367,11 +370,16 @@ function sayfaDuzenleyici(alan, deger) {
     ...Object.keys(BASLANGICLAR).map(ad => Object.assign(document.createElement('option'), { value: ad, textContent: ad })));
   sec.onchange = () => {
     if (!sec.value) return;
-    if (!confirm(`"${sec.value}" başlangıcı bütün sayfaların yerine geçecek. Devam edilsin mi?`)) { sec.value = ''; return; }
+    geriAl = serbestAnlik(`"${sec.value}" başlangıcı uygulandı.`);
     liste.forEach(sy => sy.parcalar.forEach(x => fotoSil(x.id)));
     liste.splice(0, liste.length, ...baslangicSayfalari(sec.value)); yeniden(0);
   };
   bas.appendChild(sec); kap.appendChild(bas);
+  if (geriAl) {   // başlangıç ya da aktarım önceki içeriğin yerine geçti: bir kez geri alınabilir
+    const g = Object.assign(document.createElement('div'), { className: 'geri-al' });
+    g.append(Object.assign(document.createElement('span'), { textContent: geriAl.not }), dugme('Geri al', geriAlUygula));
+    kap.appendChild(g);
+  }
 
   kap.appendChild(Object.assign(document.createElement('span'), { className: 'ipucu', textContent: `${liste.length > 1 ? `${no + 1}. sayfanın parçaları` : 'Parçalar'} · ${sayfa.parcalar.length}/${EN_FAZLA_PARCA}` }));
   const parcalar = sayfa.parcalar;
@@ -385,6 +393,7 @@ function sayfaDuzenleyici(alan, deger) {
     kart.querySelector('[data-y]').onclick = () => { [parcalar[i - 1], parcalar[i]] = [parcalar[i], parcalar[i - 1]]; yeniden(); };
     kart.querySelector('[data-a]').onclick = () => { [parcalar[i + 1], parcalar[i]] = [parcalar[i], parcalar[i + 1]]; yeniden(); };
     kart.querySelector('[data-s]').onclick = () => { parcalar.splice(i, 1); fotoSil(p.id); yeniden(); };
+    kart.appendChild(parcaAyari(p, i, parcalar, kaydet, yeniden));
     for (const f of tur.alanlar) {
       if (f.tur === 'secim') {
         const l = Object.assign(document.createElement('label'), { className: 'secim' });
@@ -424,6 +433,38 @@ function sayfaDuzenleyici(alan, deger) {
   return kap;
 }
 
+// Parçanın ölçülü ayarı: boyut − / +, hiza ← · →, üst boşluk − / + (son kademe "alta it"), varsayılana dön.
+// Değerler kademe: kitin dışına çıkan piksel ayarı yok; sınırda düğme pasif.
+function parcaAyari(p, i, parcalar, kaydet, yeniden) {
+  const ay = Object.assign(document.createElement('div'), { className: 'parca-ayar' });
+  const grup = (etiket, ...ic) => { const g = Object.assign(document.createElement('span'), { className: 'ayar-grup' }); g.setAttribute('role', 'group'); g.setAttribute('aria-label', etiket); g.append(...ic); return g; };
+  const kucuk = (metin, etiket, tik, kapali) => { const d = dugme(metin, tik, 'ayar-d'); d.setAttribute('aria-label', etiket); d.title = etiket; d.disabled = kapali; return d; };
+  const deger = t => Object.assign(document.createElement('span'), { className: 'ayar-deger', textContent: t });
+  // ara "alta it"e geçince ya da ondan çıkınca alt çapa değişir: form yeniden kurulur (diğer kartların düğmeleri güncellensin)
+  const degis = (ad, yeni, yapi = false) => { if (yeni === 0 || (ad === 'hiza' && yeni === 'orta')) delete p[ad]; else p[ad] = yeni; yapi ? yeniden() : (kaydet(), yenile()); };
+
+  const [bmin, bmax] = BOY_ARALIGI[p.tur] ?? [0, 0], boy = () => Math.min(bmax, Math.max(bmin, p.boy ?? 0));
+  const hizaVar = !TAM_GENIS.has(p.tur) && !(p.tur === 'ikon' && parcalar[i - 1]?.tur === 'ikon');   // ikon grubunun hizası ilk satırdan
+  const k = altBaslangic(parcalar), araVar = i > 0 && i !== k || (i === k && p.ara === 2);   // alt çapanın ilk parçası "alta it"ten çıkabilsin
+  const ara = () => p.ara ?? 0, hiza = () => p.hiza ?? 'orta';
+
+  function yenile() {
+    ay.replaceChildren();
+    if (bmax > bmin) ay.append(grup('Boyut',
+      kucuk('−', 'Küçült', () => degis('boy', boy() - 1), boy() <= bmin), deger(BOY_ADLARI[boy()]), kucuk('+', 'Büyüt', () => degis('boy', boy() + 1), boy() >= bmax)));
+    if (hizaVar) {
+      const sira = HIZALAR.indexOf(hiza());
+      ay.append(grup('Hiza',
+        kucuk('←', 'Sola kaydır', () => degis('hiza', HIZALAR[sira - 1]), sira <= 0), deger({ sol: 'Sol', orta: 'Orta', sag: 'Sağ' }[hiza()]), kucuk('→', 'Sağa kaydır', () => degis('hiza', HIZALAR[sira + 1]), sira >= 2)));
+    }
+    if (araVar) ay.append(grup('Üstteki boşluk',
+      kucuk('−', 'Boşluğu azalt', () => degis('ara', ara() - 1, ara() === 2), ara() <= -1), deger(`Boşluk: ${ARA_ADLARI[ara()]}`), kucuk('+', 'Boşluğu artır', () => degis('ara', ara() + 1, ara() === 1), ara() >= 2)));
+    if (p.boy || p.hiza || p.ara) ay.append(kucuk('Varsayılan', 'Boyut, hiza ve boşluğu varsayılana döndür', () => { const yapi = p.ara === 2; delete p.boy; delete p.hiza; delete p.ara; yapi ? yeniden() : (kaydet(), yenile()); }, false));
+  }
+  yenile();
+  return ay;
+}
+
 // ---------------------------------------------------------------- şablondan serbest posta aktarma
 // Çizilmiş şablonun öğeleri sırasıyla serbest post parçalarına çevrilir; fotoğraflar ve yüz de geçer.
 const ATLANAN = { 'kursu-y': 'kürsü', harita: 'harita', secenek: 'quiz şıkları', 'iki-panel': 'iki panel', logolar: 'logo ızgarası', 'bant-y': 'rol bandı' };
@@ -458,7 +499,7 @@ function parcalaraAyir(yy, eskiFoto, yeniFoto) {
     if (c.matches('.stat-y')) return { tur: 'istatistik', metin: [...c.children].map(x => `${x.querySelector('b')?.textContent ?? ''} ${x.querySelector('small')?.textContent ?? ''}`.trim()).join('\n') };
     if (c.matches('.haplar')) return { tur: 'bilgi', metin: [...c.children].map(x => x.textContent.trim()).join(' · ') };
     if (c.matches('.qr')) return { tur: 'qr', baglanti: '', metin: '' };
-    if (c.matches('.kisi-y')) { const p = { id: id(), tur: 'kisi', gorev: c.querySelector('.hap')?.textContent.trim() ?? '', ad: c.querySelector('b')?.textContent.trim() ?? '', alt: c.querySelector('small')?.textContent.trim() ?? '' }; fotoTasi(c.querySelector('.pp'), `blok-${p.id}`); return p; }
+    if (c.matches('.kisi-y')) { const p = { id: id(), tur: 'kisi', duzen: 'Satır', gorev: c.querySelector('.hap')?.textContent.trim() ?? '', ad: c.querySelector('b')?.textContent.trim() ?? '', alt: c.querySelector('small')?.textContent.trim() ?? '' }; fotoTasi(c.querySelector('.pp'), `blok-${p.id}`); return p; }
     if (c.matches('.galeri-y')) { const p = { id: id(), tur: 'galeri', adet: c.children.length === 2 ? '2' : '3' }; [...c.children].forEach((x, i) => fotoTasi(x, `blok-${p.id}-${i + 1}`)); return p; }
     if (c.matches('.foto-t, .pp')) { const r = c.offsetWidth / Math.max(1, c.offsetHeight); const p = { id: id(), tur: 'foto', oran: r > 1.15 ? 'Yatay' : r < 0.87 ? 'Dikey' : 'Kare' }; fotoTasi(c, `blok-${p.id}`); return p; }
     return null;
@@ -481,9 +522,20 @@ function parcalaraAyir(yy, eskiFoto, yeniFoto) {
 }
 
 let aktarimNotu = '';
+// Geri al: hazır başlangıç ya da şablon aktarımı Serbest post'un içeriğinin yerine geçince eski hâl bir kez geri gelir.
+// Onay penceresi (confirm) yerine: bazı tarayıcılar ve uygulama içi tarayıcılar pencereyi göstermeden "hayır" sayıyor.
+let geriAl = null;
+const serbestAnlik = not => ({ not, degerler: structuredClone(taslak.degerler.serbest), yuz: taslak.yuz.serbest, surum: taslak.surum.serbest, foto: { ...(foto.serbest ?? {}) } });
+function geriAlUygula() {
+  const g = geriAl; geriAl = null; aktarimNotu = '';
+  if (g.degerler === undefined) delete taslak.degerler.serbest; else taslak.degerler.serbest = g.degerler;
+  if (g.yuz === undefined) delete taslak.yuz.serbest; else taslak.yuz.serbest = g.yuz;
+  if (g.surum === undefined) delete taslak.surum.serbest; else taslak.surum.serbest = g.surum;
+  foto.serbest = g.foto;
+  sablonSec('serbest');
+}
 function serbesteAktar() {
-  const mevcut = taslak.degerler.serbest;
-  if (mevcut && !confirm('Serbest post\'taki mevcut içerik bu şablonun içeriğiyle değişecek. Devam edilsin mi?')) return;
+  geriAl = taslak.degerler.serbest ? serbestAnlik('Şablon aktarıldı; önceki serbest post\'un yerine geçti.') : null;
   const eskiFoto = foto[anahtar()] ?? {}, yeniFoto = {}, atlanan = new Set(), sayfaListe = [];
   for (const c of cizimler) {
     const r = parcalaraAyir(c.yy, eskiFoto, yeniFoto);
@@ -584,7 +636,7 @@ async function denetimCalistir() {
     toplam += hepsi.length; sayi++;
     const fig = document.createElement('figure');
     fig.innerHTML = `<div class="mini"></div><figcaption><b></b><span></span></figcaption>`;
-    fig.querySelector('b').textContent = `${s.ad}${v.zemin && v.zemin !== 'Sade' ? ` · ${v.zemin}` : ''} · ${YUZ_AD[y]}`;
+    fig.querySelector('b').textContent = `${s.ad}${v.zemin && v.zemin !== 'Sade' ? ` · ${v.zemin}` : ''}${v.ayar ? ` · ${v.ayar}` : ''} · ${YUZ_AD[y]}`;
     const sp = fig.querySelector('span');
     sp.className = hepsi.length ? 'sorun' : 'temiz';
     sp.textContent = hepsi.length ? hepsi.join(' · ') : 'Sorun yok';
@@ -682,6 +734,14 @@ function sekmeKur() {
     if (ad === 'denetim' && !$('#denetim-sonuc').children.length) denetimCalistir();
     if (ad === 'uret') ciz();
   });
+  // logo ve ad: ana sayfa (Üret ekranı, en üst); taslak yerinde kalır, sayfa yeniden yüklenmez
+  $('#ana-sayfa').onclick = e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;   // yeni sekmede açmak isteyene dokunma
+    e.preventDefault();
+    $('[data-sekme="uret"]').click();
+    window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    document.querySelector('.panel')?.scrollTo?.({ top: 0 });
+  };
 }
 
 function temaKur() {

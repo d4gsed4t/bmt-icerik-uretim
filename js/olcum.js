@@ -32,6 +32,8 @@ export function sigdir(yy) {
     if (sorunlu()) sigmayan.push(el);
     el.dataset.oran = (boy / taban).toFixed(2);
   }
+  // serbest postta "küçük" ayarlı parçalar: sığdırmadan sonra küçülür (bkz. sablon/serbest.js, sar)
+  for (const el of yy.querySelectorAll('[data-zoom]')) el.style.zoom = el.dataset.zoom;
   return sigmayan;
 }
 
@@ -74,4 +76,42 @@ export function denetle(yy) {
   }
   for (const K of bloklar) if (K.b.bottom > cr.bottom + 1 || K.b.right > cr.right + 1) sorunlar.push(`${blokAdi(K.el)} tuvalden taşıyor`);
   return [...new Set(sorunlar)];
+}
+
+// Tasarım denetimi (serbest post): çakışma yokken de göze batanlar.
+//   yakın: art arda iki parça arasında 16 px'ten az boşluk (kişi dairesinin halkası dahil: ::before, 16 px dışarıda)
+//   boş: parçalar sayfanın kullanılabilir yüksekliğinin %35'inden azını dolduruyor (ana görsel yok ya da küçük;
+//        eşik, kitin seyrek ama dengeli kapaklarını geçirecek kadar düşük)
+//   kenar: parça iç kenar boşluğuna taşıyor
+export function tasarimDenetle(yy) {
+  const ic = yy.querySelector('.ic'), st = getComputedStyle(ic), cr = ic.getBoundingClientRect();
+  const ust = cr.top + parseFloat(st.paddingTop), alt = cr.bottom - parseFloat(st.paddingBottom);
+  const sol = cr.left + parseFloat(st.paddingLeft), sag = cr.right - parseFloat(st.paddingRight);
+  const bos = el => el.classList.contains('esn') || (!el.children.length && !el.textContent.trim() && !el.className);
+  const gorunur = el => {   // öğenin görünen sınırı: kutusu, yazı satırları, kişi halkaları
+    const r = el.getBoundingClientRect(); let b = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    const ekle = q => { if (q.width > 1 && q.height > 1) b = { top: Math.min(b.top, q.top), bottom: Math.max(b.bottom, q.bottom), left: Math.min(b.left, q.left), right: Math.max(b.right, q.right) }; };
+    const rg = document.createRange(); rg.selectNodeContents(el);   // yazı satırı: kit denetimi gibi dikeyde %15 pay (harf kutusunun boş üst/altı)
+    [...rg.getClientRects()].forEach(q => ekle(new DOMRect(q.left, q.top + q.height * .15, q.width, q.height * .7)));
+    for (const pp of [el, ...el.querySelectorAll('.pp')].filter(x => x.classList?.contains('pp'))) { const q = pp.getBoundingClientRect(); ekle(new DOMRect(q.left - 19, q.top - 19, q.width + 38, q.height + 38)); }
+    return b;
+  };
+  const ogeler = [...ic.children].filter(el => !bos(el)).map(el => ({ el, b: gorunur(el) }));
+  const TASARIM_AD = [['.logo-yuva', 'logo'], ['.kaydir-y', 'sayfa noktaları'], ['.kisi-y, .pp', 'kişi'], ['.dev-y', 'dev başlık'], ['.rakam', 'dev rakam'],
+    ['.bas-o', 'başlık'], ['.galeri-y', 'galeri'], ['.foto-t', 'fotoğraf'], ['.qr', 'QR'], ['.kod2', 'kod kartı'], ['.liste-y', 'liste'], ['.stat-y', 'istatistik'],
+    ['.ikon-dev', 'ikon satırı'], ['.ayrac-y', 'ayraç'], ['.satir', 'bilgi satırı'], ['.buton', 'düğme'], ['.hap', 'etiket'], ['.genis', 'küçük başlık'], ['.ince', 'açıklama']];
+  const ad = el => TASARIM_AD.find(([q]) => el.matches(q) || el.querySelector(q))?.[1] ?? 'parça';
+  const sorunlar = [];
+  for (let i = 1; i < ogeler.length; i++) {
+    const a = ogeler[i - 1], b = ogeler[i], ara = b.b.top - a.b.bottom;
+    if (ara < 16) sorunlar.push(`${ad(a.el)} ile ${ad(b.el)} çok yakın (${Math.max(0, Math.round(ara))} px): alttakinin boşluğunu artır`);
+  }
+  const icerik = ogeler.filter(o => !o.el.matches('.logo-yuva, .kaydir-y'));
+  if (icerik.length) {
+    const logo = ogeler.find(o => o.el.matches('.logo-yuva')), bas = logo ? logo.b.bottom : ust;
+    const dolu = icerik.reduce((t, o) => t + (o.b.bottom - o.b.top), 0) / (alt - bas);
+    if (dolu < 0.35) sorunlar.push(`Sayfa boş kalıyor (içerik %${Math.round(dolu * 100)}): bir parçayı büyüt ya da bir ana görsel ekle (dev başlık, dev rakam, fotoğraf)`);
+  }
+  for (const o of ogeler) if (o.b.left < sol - 2 || o.b.right > sag + 2) sorunlar.push(`${ad(o.el)} kenar boşluğuna taşıyor: küçült`);
+  return sorunlar;
 }
