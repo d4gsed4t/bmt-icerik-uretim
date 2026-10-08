@@ -1,12 +1,12 @@
 // BMT Post Üretici: tasarımcı içerik girer, görsel kimliğin kendi koduyla çizilir.
 // Kavramlar: şablon (tek görsel), seri (birlikte kaydedilen sayfalar: carousel), grup (aynı içeriğin varyantları: yaka kartı rolleri).
 import { markaYukle, aktifSurum, surumBul, logolariOnYukle, dosyaYolu } from './marka.js';
-import { AILELER, SABLONLAR, ornekDegerler, kardesler, degerAnahtari } from './sablonlar.js';
+import { AILELER, SABLONLAR, ornekDegerler, kardesler, degerAnahtari, istegeBagliAlanlar } from './sablonlar.js';
 import { cizimYap, kucukGoster, bekle } from './cizim.js';
 import { pngYap, kaydet } from './yakala.js';
 import { pdfYap, jpegYap, zipYap } from './paket.js';
 import { kitUret } from './kit.js';
-import { PARCALAR, EN_FAZLA_PARCA } from './sablon/serbest.js';
+import { SERBEST, BICIMLER, PARCALAR, PARCA_ILK, EN_FAZLA_PARCA, EN_FAZLA_SAYFA, BASLANGICLAR, baslangicSayfalari, sayfalarOf, anaGorselFazlasi } from './sablon/serbest.js';
 
 const $ = s => document.querySelector(s);
 const YUZ_AD = { a: 'Koyu', b: 'Açık', alarm: 'Alarm', saygi: 'Saygı', foto: 'Fotoğraf' };
@@ -31,17 +31,24 @@ let cizimler = [];          // son çizimde her sayfanın {s, yy, sigmayan, soru
 let bloblar = null, cizimNo = 0, olcek = 1;
 
 const anahtar = () => degerAnahtari(sablon);
-const sayfalar = () => (sablon.seri ? kardesler(sablon) : [sablon]);
+// Taban şablon: serbest postta önizlenen sayfa sanal bir şablondur, tabanı Serbest post'tur
+const taban = () => sablon.taban ?? sablon;
+// Kaydedilecek sayfalar: serbest postta kullanıcının sayfaları, seride kardeşler, gerisinde tek şablon
+const sayfalar = () => { const t = taban(); return t.sayfaUret ? t.sayfaUret(degerler(t)) : t.seri ? kardesler(t) : [t]; };
 // Yüz seçimi serinin ilk sayfasına göredir; diğer sayfalar kendi listesindeki aynı sıradaki yüzü alır
 // (üye kartı: ön ['a','b'], arka ['b','a'] → "Koyu" seçilince ön koyu, arka açık).
 const ilkSayfa = () => sayfalar()[0];
-const yuzSec = () => (ilkSayfa().yuzler.includes(taslak.yuz[anahtar()]) ? taslak.yuz[anahtar()] : ilkSayfa().yuzler[0]);
+// Seçilebilir yüzler: şablon değerlere göre daraltabilir (serbest post: fotoğraf zemini tek yüz, konsept yalnız koyu)
+const yuzListesi = () => { const i = ilkSayfa(); return i.yuzFiltre?.(degerler(i)) ?? i.yuzler; };
+const yuzSec = () => { const l = yuzListesi(); return l.includes(taslak.yuz[anahtar()]) ? taslak.yuz[anahtar()] : (l[0] ?? ilkSayfa().yuzler[0]); };
 const sayfaYuzu = s => s.yuzler[ilkSayfa().yuzler.indexOf(yuzSec())] ?? s.yuzler[0];
 const surumSec = () => surumBul(marka, taslak.surum[anahtar()]) ?? aktif;
 const kaydetTaslak = () => yerel.yaz(TASLAK, taslak);
 // Seri ya da grubun bütün alanları (aynı adlı alan bir kez)
 const alanlar = () => { const g = new Map(); for (const s of sayfalar()) for (const a of s.alanlar) if (!g.has(a.ad)) g.set(a.ad, a); return [...g.values()]; };
-const degerler = s => ({ ...ornekDegerler(s), ...(taslak.degerler[degerAnahtari(s)] ?? {}), ...(foto[degerAnahtari(s)] ?? {}) });
+const hamDegerler = s => ({ ...ornekDegerler(s), ...(taslak.degerler[degerAnahtari(s)] ?? {}), ...(foto[degerAnahtari(s)] ?? {}) });
+// Gizlenen isteğe bağlı alanlar boş çizilir (şablon o öğeyi hiç koymaz); yazının kendisi saklı kalır, "Göster" ile döner
+const degerler = s => { const v = hamDegerler(s), g = taslak.gizli?.[degerAnahtari(s)] ?? {}; for (const ad in g) if (g[ad]) v[ad] = ''; return v; };
 
 // ---------------------------------------------------------------- çizim akışı
 async function ciz() {
@@ -79,9 +86,8 @@ function onizle() {
 function uyarilariGoster() {
   const li = [], cok = cizimler.length > 1;
   // serbest post: taşma varsa asıl çare parça çıkarmak ya da daha uzun biçim; önce bunu söyle
-  const c0 = cizimler[0];
-  if (sablon.id === 'serbest' && c0 && (c0.sigmayan.length || c0.sorunlar.length))
-    li.push(['hata', 'İçerik bu biçime sığmıyor: bir parçayı çıkar, metni kısalt ya da daha uzun bir biçim seç (ör. Story).']);
+  if (taban().id === 'serbest' && cizimler.some(c => c.sigmayan.length || c.sorunlar.length))
+    li.push(['hata', 'İçerik bu biçime sığmıyor: bir parçayı çıkar, metni kısalt, bir sonraki sayfaya taşı ya da daha uzun bir biçim seç (ör. Story).']);
   for (const [i, c] of cizimler.entries()) {
     const on = cok ? `${i + 1}. sayfa: ` : '';
     for (const el of c.sigmayan) li.push(['hata', `${on}${el.classList.contains('dev-y') ? 'Dev başlık' : 'Yazı'} sığmıyor: kısalt ya da satırlara böl.`]);
@@ -91,10 +97,18 @@ function uyarilariGoster() {
   }
   // boş fotoğraf yuvası: kitteki yer tutucu ("FOTOĞRAF") görselde çıkar
   const f = foto[anahtar()] ?? {};
-  for (const a of alanlar().filter(a => a.tur === 'foto' && !f[a.ad])) li.push(['', `${a.etiket} eklenmedi: görselde yer tutucu çıkar.`]);
-  for (const p of (degerler(sablon).parcalar ?? []).filter(p => p.tur === 'foto' && !f[`blok-${p.id}`])) li.push(['', 'Fotoğraf parçası boş: görselde yer tutucu çıkar.']);
+  const v0 = degerler(taban());
+  for (const a of alanlar().filter(a => a.tur === 'foto' && !f[a.ad] && (!a.kosul || a.kosul(v0)))) li.push(['', `${a.etiket} eklenmedi: görselde yer tutucu çıkar.`]);
+  if (taban().sayfaUret) for (const [i, sy] of sayfalarOf(v0).entries()) {
+    const on = sayfalarOf(v0).length > 1 ? `${i + 1}. sayfa: ` : '';
+    const eksik = sy.parcalar.flatMap(x => (x.tur === 'galeri' ? PARCALAR.galeri.fotolar(x).map(n => `blok-${x.id}-${n}`) : ['foto', 'kisi'].includes(x.tur) ? [`blok-${x.id}`] : [])).filter(k => !f[k]);
+    if (eksik.length) li.push(['', `${on}${eksik.length} fotoğraf yeri boş: görselde yer tutucu çıkar.`]);
+    const ana = anaGorselFazlasi(sy);
+    if (ana.length) li.push(['', `${on}İki ana görsel var (${ana.join(', ')}). Kitin kuralı: her görselde tek ana görsel. Birini çıkar ya da ayrı sayfaya taşı.`]);
+  }
   const logolar = alanlar().filter(a => a.tur === 'logo');
   if (logolar.length && !logolar.some(a => f[a.ad])) li.push(['', 'Logo eklenmedi: kutularda yer tutucu çıkar. Yalnız eklediğin logolar gösterilir.']);
+  if (aktarimNotu && taban().id === 'serbest') li.unshift(['bilgi', aktarimNotu]);
   $('#uyarilar').replaceChildren(...li.map(([c, t]) => Object.assign(document.createElement('li'), { className: c, textContent: t })));
 }
 
@@ -159,6 +173,7 @@ async function sablonKartlari() {
 }
 
 function sablonSec(id) {
+  if (id !== 'serbest') aktarimNotu = '';
   sablon = SABLONLAR.find(s => s.id === id);
   taslak.sablon = id; kaydetTaslak();
   document.querySelectorAll('.sablon-kart').forEach(k => k.setAttribute('aria-checked', String(k.dataset.anahtar === anahtar())));
@@ -226,8 +241,8 @@ function varyantDugmeleri() {
 }
 
 function yuzDugmeleri() {
-  $('#yuz-bolum').hidden = ilkSayfa().yuzler.length < 2;
-  $('#yuzler').replaceChildren(...ilkSayfa().yuzler.map(y => {
+  $('#yuz-bolum').hidden = yuzListesi().length < 2;
+  $('#yuzler').replaceChildren(...yuzListesi().map(y => {
     const b = Object.assign(document.createElement('button'), { type: 'button', textContent: YUZ_AD[y] });
     b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(y === yuzSec()));
     b.onclick = () => { taslak.yuz[anahtar()] = y; kaydetTaslak(); yuzDugmeleri(); ciz(); };
@@ -241,9 +256,9 @@ function sayfaSekmeleri() {
   kap.hidden = s.length < 2;
   if (s.length < 2) return;
   kap.replaceChildren(...s.map((x, i) => {
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `${i + 1} · ${buyukBas(x.ad.split(' · ').at(-1))}` });
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: x.taban ? `${i + 1}. sayfa` : `${i + 1} · ${buyukBas(x.ad.split(' · ').at(-1))}` });
     b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(x.id === sablon.id));
-    b.onclick = () => { sablon = x; taslak.sablon = x.id; kaydetTaslak(); onizle(); };
+    b.onclick = () => { sablon = x; taslak.sablon = x.taban?.id ?? x.id; kaydetTaslak(); onizle(); if (x.taban) formKur(); };
     return b;
   }));
 }
@@ -257,13 +272,17 @@ function degerYaz(ad, deger) {
 }
 
 function formKur() {
-  const form = $('#form'), v = degerler(sablon);
+  const form = $('#form'), v = hamDegerler(sablon);
+  const istege = taban().sayfaUret ? new Set() : new Set(sayfalar().flatMap(x => [...istegeBagliAlanlar(x)]));
+  const gizli = (taslak.gizli ??= {})[anahtar()] ??= {};
+  $('#serbest-aktar').hidden = !!taban().sayfaUret;
   form.replaceChildren();
   let ucli = null;   // tarih · saat · yer tek satırda, şablondaki yerinde
   if (!alanlar().length) form.appendChild(Object.assign(document.createElement('p'), { className: 'not', textContent: 'Bu şablonda yazı yok: yüzü (ve varsa konuyu) seçip kaydet.' }));
   for (const a of alanlar()) {
+    if (a.kosul && !a.kosul(v)) continue;   // ör. zemin görseli yalnız Fotoğraf ve Konsept zemininde
     if (a.tur === 'foto' || a.tur === 'logo') { form.appendChild(fotoAlani(a)); continue; }
-    if (a.tur === 'parcalar') { form.appendChild(parcaDuzenleyici(a, v[a.ad])); continue; }
+    if (a.tur === 'sayfalar') { form.appendChild(sayfaDuzenleyici(a, v[a.ad])); continue; }
     if (a.tur === 'liste') {
       const kutu = Object.assign(document.createElement('label'), { className: 'alan' });
       kutu.innerHTML = `<span><span></span></span><select></select>`;
@@ -271,7 +290,7 @@ function formKur() {
       const sec = kutu.querySelector('select');
       sec.replaceChildren(...a.secenekler.map(x => Object.assign(document.createElement('option'), { value: x, textContent: x })));
       sec.value = v[a.ad] ?? a.secenekler[0];
-      sec.onchange = () => { degerYaz(a.ad, sec.value); ciz(); };
+      sec.onchange = () => { degerYaz(a.ad, sec.value); if (a.yenidenKur) { formKur(); yuzDugmeleri(); } ciz(); };
       form.appendChild(kutu); continue;
     }
     const kutu = document.createElement('label');
@@ -288,6 +307,14 @@ function formKur() {
     kutu.querySelector('span > span').textContent = a.etiket;
     if (a.ipucu) kutu.querySelector('.ipucu').textContent = a.ipucu;
     const g = kutu.querySelector('input, textarea'), say = kutu.querySelector('small');
+    if (istege.has(a.ad)) {
+      // isteğe bağlı: gizlenince görselden çıkar, yazı silinmez
+      const d = Object.assign(document.createElement('button'), { type: 'button', className: 'gizle', textContent: gizli[a.ad] ? 'Göster' : 'Gizle' });
+      d.setAttribute('aria-pressed', String(!!gizli[a.ad]));
+      d.onclick = e => { e.preventDefault(); gizli[a.ad] = !gizli[a.ad]; kaydetTaslak(); formKur(); ciz(); };
+      kutu.querySelector('span').appendChild(d);
+      if (gizli[a.ad]) { kutu.classList.add('gizli'); g.disabled = true; }
+    }
     g.value = v[a.ad] ?? ''; g.maxLength = a.max; g.lang = 'tr'; g.spellcheck = a.tur !== 'kod';
     if (a.tur === 'kod') { g.classList.add('kod'); g.autocapitalize = 'off'; g.setAttribute('autocorrect', 'off'); }
     if (a.tur === 'uzun' || a.tur === 'kod') g.rows = Math.min(a.satir ?? 4, Math.max(2, (g.value.match(/\n/g)?.length ?? 0) + 1));
@@ -301,31 +328,63 @@ function formKur() {
   }
 }
 
-// ---------------------------------------------------------------- serbest post: parça düzenleyicisi
-// Yeni parçanın başlangıç içeriği (boş kalmasın, nereye ne yazılacağı görünsün)
-const PARCA_ILK = {
-  hap: { metin: 'Duyuru' }, genis: { metin: 'Küçük başlık' }, dev: { metin: 'Yeni\nbaşlık.', vurgu: true }, baslik: { metin: 'Başlık' },
-  metin: { metin: 'Kısa bir açıklama.' }, liste: { metin: 'Birinci madde\nİkinci madde' }, foto: { oran: 'Yatay' },
-  kod: { metin: 'print("Merhaba BMT")' }, qr: { baglanti: '', metin: '' }, bilgi: { metin: '14 Ekim · 15.30 · Amfi 2' }, buton: { metin: 'Kayıt ol →' },
-};
+// ---------------------------------------------------------------- serbest post: sayfa ve parça düzenleyicisi
 const yeniKimlik = () => Math.random().toString(36).slice(2, 8);
+const fotoSil = id => { for (const k of Object.keys(foto[anahtar()] ?? {})) if (k === `blok-${id}` || k.startsWith(`blok-${id}-`)) delete foto[anahtar()][k]; };
+const dugme = (metin, tik, cls = 'ikincil') => Object.assign(document.createElement('button'), { type: 'button', className: cls, textContent: metin, onclick: tik });
 
-function parcaDuzenleyici(alan, deger) {
+function sayfaDuzenleyici(alan, deger) {
   const kap = Object.assign(document.createElement('div'), { className: 'parcalar' });
-  const liste = structuredClone(Array.isArray(deger) ? deger : []);
+  const liste = structuredClone(sayfalarOf({ sayfalar: deger }));
+  const no = Math.min(sablon.sayfaNo ?? 0, liste.length - 1), sayfa = liste[no];
   const kaydet = () => { degerYaz(alan.ad, liste); ciz(); };
-  const yeniden = () => { kaydet(); kap.replaceWith(parcaDuzenleyici(alan, liste)); };   // sıra/ekle/sil sonrası
-  kap.innerHTML = `<span class="alan"><span><span>${alan.etiket}</span><small>${liste.length}/${EN_FAZLA_PARCA}</small></span></span>`;
-  for (const [i, p] of liste.entries()) {
+  // yapı değişince (sayfa/parça ekle, sil, taşı) form ve önizleme o sayfayla yeniden kurulur
+  const yeniden = (hedef = no) => { degerYaz(alan.ad, liste); sablon = sayfalar()[Math.min(hedef, liste.length - 1)]; taslak.sablon = taban().id; formKur(); ciz(); };
+
+  // sayfalar
+  const ust = Object.assign(document.createElement('div'), { className: 'sayfa-cubuk' });
+  ust.appendChild(Object.assign(document.createElement('span'), { className: 'ipucu', textContent: 'Sayfa:' }));
+  for (const [i] of liste.entries()) {
+    const d = dugme(String(i + 1), () => yeniden(i), 'sayfa-no');
+    d.setAttribute('aria-pressed', String(i === no)); d.setAttribute('aria-label', `${i + 1}. sayfa`);
+    ust.appendChild(d);
+  }
+  if (liste.length < EN_FAZLA_SAYFA) {
+    ust.appendChild(dugme('+ Sayfa', () => { liste.push({ id: yeniKimlik(), parcalar: [] }); yeniden(liste.length - 1); }));
+    ust.appendChild(dugme('Çoğalt', () => {
+      const kopya = structuredClone(sayfa); kopya.id = yeniKimlik(); kopya.parcalar.forEach(x => { x.id = yeniKimlik(); });
+      liste.splice(no + 1, 0, kopya); yeniden(no + 1);
+    }));
+  }
+  if (liste.length > 1) ust.appendChild(dugme('Sayfayı sil', () => { sayfa.parcalar.forEach(x => fotoSil(x.id)); liste.splice(no, 1); yeniden(Math.max(0, no - 1)); }));
+  kap.appendChild(ust);
+
+  // hazır başlangıçlar
+  const bas = Object.assign(document.createElement('div'), { className: 'baslangic' });
+  const sec = document.createElement('select');
+  sec.setAttribute('aria-label', 'Hazır başlangıç');
+  sec.replaceChildren(Object.assign(document.createElement('option'), { value: '', textContent: 'Hazır başlangıç seç…' }),
+    ...Object.keys(BASLANGICLAR).map(ad => Object.assign(document.createElement('option'), { value: ad, textContent: ad })));
+  sec.onchange = () => {
+    if (!sec.value) return;
+    if (!confirm(`"${sec.value}" başlangıcı bütün sayfaların yerine geçecek. Devam edilsin mi?`)) { sec.value = ''; return; }
+    liste.forEach(sy => sy.parcalar.forEach(x => fotoSil(x.id)));
+    liste.splice(0, liste.length, ...baslangicSayfalari(sec.value)); yeniden(0);
+  };
+  bas.appendChild(sec); kap.appendChild(bas);
+
+  kap.appendChild(Object.assign(document.createElement('span'), { className: 'ipucu', textContent: `${liste.length > 1 ? `${no + 1}. sayfanın parçaları` : 'Parçalar'} · ${sayfa.parcalar.length}/${EN_FAZLA_PARCA}` }));
+  const parcalar = sayfa.parcalar;
+  for (const [i, p] of parcalar.entries()) {
     const tur = PARCALAR[p.tur]; if (!tur) continue;
     const kart = Object.assign(document.createElement('div'), { className: 'parca' });
     kart.innerHTML = `<div class="parca-ust"><b></b><span><button type="button" data-y aria-label="Yukarı taşı">↑</button><button type="button" data-a aria-label="Aşağı taşı">↓</button><button type="button" data-s aria-label="Parçayı sil">✕</button></span></div>`;
     kart.querySelector('b').textContent = `${i + 1}. ${tur.ad}`;
     kart.querySelector('[data-y]').disabled = i === 0;
-    kart.querySelector('[data-a]').disabled = i === liste.length - 1;
-    kart.querySelector('[data-y]').onclick = () => { [liste[i - 1], liste[i]] = [liste[i], liste[i - 1]]; yeniden(); };
-    kart.querySelector('[data-a]').onclick = () => { [liste[i + 1], liste[i]] = [liste[i], liste[i + 1]]; yeniden(); };
-    kart.querySelector('[data-s]').onclick = () => { liste.splice(i, 1); delete foto[anahtar()]?.[`blok-${p.id}`]; yeniden(); };
+    kart.querySelector('[data-a]').disabled = i === parcalar.length - 1;
+    kart.querySelector('[data-y]').onclick = () => { [parcalar[i - 1], parcalar[i]] = [parcalar[i], parcalar[i - 1]]; yeniden(); };
+    kart.querySelector('[data-a]').onclick = () => { [parcalar[i + 1], parcalar[i]] = [parcalar[i], parcalar[i + 1]]; yeniden(); };
+    kart.querySelector('[data-s]').onclick = () => { parcalar.splice(i, 1); fotoSil(p.id); yeniden(); };
     for (const f of tur.alanlar) {
       if (f.tur === 'secim') {
         const l = Object.assign(document.createElement('label'), { className: 'secim' });
@@ -335,10 +394,11 @@ function parcaDuzenleyici(alan, deger) {
         kart.appendChild(l); continue;
       }
       if (f.tur === 'liste') {
-        const sec = document.createElement('select');
-        sec.replaceChildren(...f.secenekler.map(x => Object.assign(document.createElement('option'), { value: x, textContent: `${f.etiket}: ${x}` })));
-        sec.value = p[f.ad] ?? f.secenekler[0]; sec.onchange = () => { p[f.ad] = sec.value; kaydet(); };
-        kart.appendChild(sec); continue;
+        const sl = document.createElement('select');
+        sl.replaceChildren(...f.secenekler.map(x => Object.assign(document.createElement('option'), { value: x, textContent: `${f.etiket}: ${x}` })));
+        sl.value = p[f.ad] ?? f.secenekler[0];
+        sl.onchange = () => { p[f.ad] = sl.value; p.tur === 'galeri' ? yeniden() : kaydet(); };   // galeri: fotoğraf alanı sayısı değişir
+        kart.appendChild(sl); continue;
       }
       const g = document.createElement(f.tur === 'kisa' ? 'input' : 'textarea');
       if (f.tur === 'kisa') g.type = 'text'; else g.rows = Math.min(5, Math.max(2, (String(p[f.ad] ?? '').match(/\n/g)?.length ?? 0) + 1));
@@ -350,20 +410,99 @@ function parcaDuzenleyici(alan, deger) {
       kart.appendChild(g);
       if (f.ipucu) kart.appendChild(Object.assign(document.createElement('span'), { className: 'ipucu', textContent: f.ipucu }));
     }
-    if (p.tur === 'foto') kart.appendChild(fotoAlani({ ad: `blok-${p.id}`, etiket: 'Fotoğraf', tur: 'foto' }));
+    if (p.tur === 'foto' || tur.foto) kart.appendChild(fotoAlani({ ad: `blok-${p.id}`, etiket: p.tur === 'kisi' ? 'Kişinin fotoğrafı' : 'Fotoğraf', tur: 'foto' }));
+    if (p.tur === 'galeri') for (const n of tur.fotolar(p)) kart.appendChild(fotoAlani({ ad: `blok-${p.id}-${n}`, etiket: `${n}. fotoğraf`, tur: 'foto' }));
     kap.appendChild(kart);
   }
-  if (liste.length < EN_FAZLA_PARCA) {
+  if (parcalar.length < EN_FAZLA_PARCA) {
     const ekle = Object.assign(document.createElement('div'), { className: 'parca-ekle' });
     ekle.innerHTML = '<span class="ipucu">Parça ekle:</span>';
-    for (const [tur, t] of Object.entries(PARCALAR)) {
-      const d = Object.assign(document.createElement('button'), { type: 'button', className: 'ikincil', textContent: `+ ${t.ad}` });
-      d.onclick = () => { liste.push({ id: yeniKimlik(), tur, ...structuredClone(PARCA_ILK[tur]) }); yeniden(); };
-      ekle.appendChild(d);
-    }
+    for (const [tur, t] of Object.entries(PARCALAR))
+      ekle.appendChild(dugme(`+ ${t.ad}`, () => { parcalar.push({ id: yeniKimlik(), tur, ...structuredClone(PARCA_ILK[tur]) }); yeniden(); }));
     kap.appendChild(ekle);
   }
   return kap;
+}
+
+// ---------------------------------------------------------------- şablondan serbest posta aktarma
+// Çizilmiş şablonun öğeleri sırasıyla serbest post parçalarına çevrilir; fotoğraflar ve yüz de geçer.
+const ATLANAN = { 'kursu-y': 'kürsü', harita: 'harita', secenek: 'quiz şıkları', 'iki-panel': 'iki panel', logolar: 'logo ızgarası', 'bant-y': 'rol bandı' };
+function metinOf(el, vurgu = '*', kalin = '**') {
+  let t = '';
+  for (const c of el.childNodes) {
+    if (c.nodeType === 3) t += c.textContent;
+    else if (c.tagName === 'BR') t += '\n';
+    else if (c.tagName === 'EM') t += `${vurgu}${metinOf(c, vurgu, kalin)}${vurgu}`;
+    else if (c.tagName === 'B') t += `${kalin}${metinOf(c, vurgu, kalin)}${kalin}`;
+    else if (c.tagName !== 'I') t += metinOf(c, vurgu, kalin);
+  }
+  return t.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').trim();
+}
+function parcalaraAyir(yy, eskiFoto, yeniFoto) {
+  const parcalar = [], atlanan = new Set();
+  const id = () => Math.random().toString(36).slice(2, 8);
+  const fotoTasi = (el, yeni) => { const f = eskiFoto[el?.dataset?.foto]; if (f) yeniFoto[yeni] = f; };
+  const tani = c => {
+    if (c.matches('.hap')) return { tur: 'hap', metin: c.textContent.trim() };
+    if (c.matches('.genis')) return { tur: 'genis', metin: c.textContent.trim() };
+    if (c.matches('.dev-y')) return { tur: 'dev', metin: metinOf(c, '*', '') };
+    if (c.matches('.bas-o')) return { tur: 'baslik', metin: metinOf(c, '*', '') };
+    if (c.matches('p.rakam')) return { tur: 'rakam', metin: c.textContent.trim(), alt: '' };
+    if (c.matches('p.ince, .eski-y')) return { tur: 'metin', metin: metinOf(c, '', '**') };
+    if (c.matches('.satir')) return { tur: 'bilgi', metin: [...c.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).filter(Boolean).join(' · ') };
+    if (c.matches('.buton')) return { tur: 'buton', metin: c.textContent.trim() };
+    if (c.matches('.ayrac-y')) return { tur: 'ayrac' };
+    if (c.matches('.kod2')) return { tur: 'kod', metin: c.querySelector('pre').textContent };
+    // satır içindeki parçalar (saat + açıklama, gün + etkinlik + saat) boşlukla birleşir
+    if (c.matches('.liste-y, .gunler, .akis-y')) return { tur: 'liste', metin: [...c.children].map(x => (x.children.length ? [...x.children].map(y => y.textContent.trim()).filter(Boolean).join(' ') : x.textContent).replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n') };
+    if (c.matches('.stat-y')) return { tur: 'istatistik', metin: [...c.children].map(x => `${x.querySelector('b')?.textContent ?? ''} ${x.querySelector('small')?.textContent ?? ''}`.trim()).join('\n') };
+    if (c.matches('.haplar')) return { tur: 'bilgi', metin: [...c.children].map(x => x.textContent.trim()).join(' · ') };
+    if (c.matches('.qr')) return { tur: 'qr', baglanti: '', metin: '' };
+    if (c.matches('.kisi-y')) { const p = { id: id(), tur: 'kisi', gorev: c.querySelector('.hap')?.textContent.trim() ?? '', ad: c.querySelector('b')?.textContent.trim() ?? '', alt: c.querySelector('small')?.textContent.trim() ?? '' }; fotoTasi(c.querySelector('.pp'), `blok-${p.id}`); return p; }
+    if (c.matches('.galeri-y')) { const p = { id: id(), tur: 'galeri', adet: c.children.length === 2 ? '2' : '3' }; [...c.children].forEach((x, i) => fotoTasi(x, `blok-${p.id}-${i + 1}`)); return p; }
+    if (c.matches('.foto-t, .pp')) { const r = c.offsetWidth / Math.max(1, c.offsetHeight); const p = { id: id(), tur: 'foto', oran: r > 1.15 ? 'Yatay' : r < 0.87 ? 'Dikey' : 'Kare' }; fotoTasi(c, `blok-${p.id}`); return p; }
+    return null;
+  };
+  const gez = el => {
+    for (const c of el.children) {
+      if (c.matches('.logo-yuva, .esn, .kaydir-y')) continue;
+      const atla = [...c.classList].find(k => ATLANAN[k]);
+      if (atla) { atlanan.add(ATLANAN[atla]); continue; }
+      const p = tani(c);
+      if (p) { parcalar.push({ id: p.id ?? id(), ...p }); continue; }
+      // doğrudan yazı taşıyan kutu (içinde yalnız <br>/<b> olabilir) yazıdır; değilse sarmalayıcıdır (cam kutu, sıra): içine bak
+      const yazili = [...c.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+      if (yazili) { parcalar.push({ id: id(), tur: 'metin', metin: metinOf(c, '', '**') }); continue; }
+      if (c.children.length) gez(c);
+    }
+  };
+  gez(yy.querySelector('.ic'));
+  return { parcalar, atlanan };
+}
+
+let aktarimNotu = '';
+function serbesteAktar() {
+  const mevcut = taslak.degerler.serbest;
+  if (mevcut && !confirm('Serbest post\'taki mevcut içerik bu şablonun içeriğiyle değişecek. Devam edilsin mi?')) return;
+  const eskiFoto = foto[anahtar()] ?? {}, yeniFoto = {}, atlanan = new Set(), sayfaListe = [];
+  for (const c of cizimler) {
+    const r = parcalaraAyir(c.yy, eskiFoto, yeniFoto);
+    r.atlanan.forEach(x => atlanan.add(x));
+    for (let i = 0; i < Math.max(1, r.parcalar.length); i += EN_FAZLA_PARCA) sayfaListe.push({ id: Math.random().toString(36).slice(2, 8), parcalar: r.parcalar.slice(i, i + EN_FAZLA_PARCA) });
+  }
+  const yy = cizimler[0].yy, w = yy.offsetWidth, h = yy.offsetHeight;
+  const bicim = Object.keys(BICIMLER).find(k => BICIMLER[k].w === w && BICIMLER[k].h === h) ?? (w > h ? 'Yatay (1920 × 1080)' : 'Post (1080 × 1440)');
+  const fbg = yy.querySelector('.foto-bg'), kon = yy.querySelector('.konsept');
+  const zemin = fbg ? 'Fotoğraf' : kon ? 'Konsept' : 'Sade';
+  if (fbg) { const f = eskiFoto[fbg.dataset.foto]; if (f) yeniFoto.zeminFoto = f; }
+  if (kon?.dataset.foto && eskiFoto[kon.dataset.foto]) yeniFoto.zeminFoto = eskiFoto[kon.dataset.foto];
+  const yuz = yuzSec();
+  taslak.degerler.serbest = { bicim, zemin, sayfalar: sayfaListe.slice(0, EN_FAZLA_SAYFA) };
+  taslak.yuz.serbest = ['a', 'b', 'alarm'].includes(yuz) ? yuz : 'a';
+  taslak.surum.serbest = surumSec().id;
+  foto.serbest = yeniFoto;
+  aktarimNotu = `"${(taban().seri?.ad ?? taban().grup?.ad ?? taban().ad)}" serbest posta aktarıldı.` + (atlanan.size ? ` Aktarılamayan öğeler: ${[...atlanan].join(', ')}.` : '');
+  aile = 'Serbest'; aileSekmeleri(); sablonKartlari(); sablonSec('serbest');
 }
 
 // ---------------------------------------------------------------- fotoğraf
@@ -435,14 +574,17 @@ async function denetimCalistir() {
   const gecici = Object.assign(document.createElement('div'), { className: 'cizim' }); document.body.appendChild(gecici);
   await logolariOnYukle(surum);
   let toplam = 0, sayi = 0;
-  for (const s of SABLONLAR) for (const y of s.yuzler) {
-    const { yy, sigmayan, sorunlar } = await cizimYap(s, ornekDegerler(s), y, surum, gecici);
+  // şablonun kendi örneği + (varsa) denetimin denemesi gereken değer varyantları (serbest post: her zemin)
+  const denemeler = SABLONLAR.flatMap(s => [ornekDegerler(s), ...(s.denetimDegerleri ?? []).map(d => ({ ...ornekDegerler(s), ...d }))]
+    .flatMap(v => { const l = s.yuzFiltre?.(v) ?? s.yuzler; return (l.length ? l : [s.yuzler[0]]).map(y => ({ s, v, y })); }));
+  for (const { s, v, y } of denemeler) {
+    const { yy, sigmayan, sorunlar } = await cizimYap(s, v, y, surum, gecici);
     if (no !== denetimNo) { gecici.remove(); return; }
     const hepsi = [...sigmayan.map(() => 'yazı sığmıyor'), ...sorunlar];
     toplam += hepsi.length; sayi++;
     const fig = document.createElement('figure');
     fig.innerHTML = `<div class="mini"></div><figcaption><b></b><span></span></figcaption>`;
-    fig.querySelector('b').textContent = `${s.ad} · ${YUZ_AD[y]}`;
+    fig.querySelector('b').textContent = `${s.ad}${v.zemin && v.zemin !== 'Sade' ? ` · ${v.zemin}` : ''} · ${YUZ_AD[y]}`;
     const sp = fig.querySelector('span');
     sp.className = hepsi.length ? 'sorun' : 'temiz';
     sp.textContent = hepsi.length ? hepsi.join(' · ') : 'Sorun yok';
@@ -572,11 +714,13 @@ async function basla() {
     if ($('#kaydet').dataset.hata) return ciz();
     if (!bloblar) return;
     const tarih = new Date().toISOString().slice(0, 10), kok = degerAnahtari(sablon);
-    const adlar = cizimler.map((c, i) => cizimler.length > 1 ? `bmt-${kok}-${i + 1}-${c.s.id}-${tarih}.png` : `bmt-${c.s.id}-${tarih}.png`);
+    const dosyaAdi = c => c.s.id.replace('#', '-sayfa');   // serbest postun sanal sayfa kimliği (serbest#1) dosya adına uygun olsun
+    const adlar = cizimler.map((c, i) => cizimler.length > 1 ? `bmt-${kok}-${i + 1}-${dosyaAdi(c).replace(/-sayfa\d+$/, '')}-${tarih}.png` : `bmt-${dosyaAdi(c).replace(/-sayfa\d+$/, '')}-${tarih}.png`);
     const sonuc = await kaydet(bloblar, adlar);
     if (sonuc === 'indirildi') $('#kaydet-not').textContent = cizimler.length > 1 ? `${cizimler.length} dosya indirildi.` : 'İndirildi.';
   };
   $('#toplu-indir').onclick = topluIndir;
+  $('#serbest-aktar').onclick = serbesteAktar;
   $('#sifirla').onclick = () => { const k = anahtar(); delete taslak.degerler[k]; delete taslak.surum[k]; delete foto[k]; kaydetTaslak(); formKur(); ciz(); };
   let boyut; addEventListener('resize', () => { clearTimeout(boyut); boyut = setTimeout(onizle, 150); });
 

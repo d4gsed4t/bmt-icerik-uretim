@@ -171,3 +171,14 @@
 .yy.b .logolar img.tek { filter:brightness(0); opacity:.82; }
 /* yazısız zemin (kit/08): gradyanla boyanmış yazı saydamlaştırılmadan önce düz zemine döner (canva_yerli.YERLI_CSS) */
 .yy.yazisiz .dev-y, .yy.yazisiz .rakam, .yy.yazisiz .stat-y b { background:none !important; }
+/* serbest post zeminleri (kit/05-grafik ışıkları ve halkaları) */
+.yy .isik { position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(62% 52% at 50% -12%, rgba(53,201,193,.78), rgba(53,201,193,.26) 48%, transparent 78%),
+             radial-gradient(58% 36% at 50% 50%, rgba(56,92,226,.62), transparent 72%),
+             radial-gradient(32% 20% at 50% 50%, rgba(53,201,193,.20), transparent 80%); }
+.yy.b .isik { background:radial-gradient(62% 52% at 50% -12%, rgba(53,201,193,.50), rgba(53,201,193,.14) 48%, transparent 78%),
+             radial-gradient(58% 36% at 50% 50%, rgba(119,172,212,.58), transparent 72%); }
+.yy.alarm .isik { background:radial-gradient(62% 52% at 50% -12%, rgba(255,255,255,.65), transparent 78%); }
+.yy .halka { position:absolute; inset:0; width:100%; height:100%; color:var(--c2); pointer-events:none; }
+/* fotoğraf zemininde düğme koyu yüzdeki gibi */
+.yy.foto .buton { background:#35C9C1; color:#14123A; box-shadow:0 0 60px rgba(53,201,193,.4); }

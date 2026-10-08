@@ -79,6 +79,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .alan input[type="text"], .alan textarea { width: 100%; border: 1px solid var(--cizgi); background: var(--yuzey); border-radius: 10px; padding: 10px 12px; font-size: 16px; resize: vertical; }
 .alan input[type="text"]:focus, .alan textarea:focus { outline: none; border-color: var(--vurgu); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vurgu) 22%, transparent); }
 .alan .ipucu { font-size: 12.5px; color: var(--soluk); }
+.alan .gizle { margin-left: auto; border: 1px solid var(--cizgi); background: none; color: var(--soluk); border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.alan .gizle[aria-pressed="true"] { color: var(--vurgu); border-color: var(--vurgu); }
+.alan.gizli input, .alan.gizli textarea { opacity: .45; }
+.uyarilar li.bilgi { background: color-mix(in srgb, var(--vurgu) 13%, transparent); color: var(--vurgu); }
 .alan textarea.kod { font: 14px/1.5 'BMT Kod', ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow-x: auto; }
 .alan select { width: 100%; border: 1px solid var(--cizgi); background: var(--yuzey); border-radius: 10px; padding: 10px 12px; font-size: 16px; }
 .ucli { display: grid; grid-template-columns: 1.3fr .8fr 1.2fr; gap: 8px; }
@@ -93,6 +97,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .parca input[type="text"], .parca textarea, .parca select { width: 100%; border: 1px solid var(--cizgi); background: var(--bg); border-radius: 10px; padding: 9px 11px; font-size: 16px; resize: vertical; }
 .parca .ipucu { font-size: 12.5px; color: var(--soluk); }
 .parca .foto-alan { border-style: solid; }
+.sayfa-cubuk, .baslangic { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sayfa-cubuk .ikincil { padding: 7px 12px; font-size: 13px; }
+.sayfa-no { min-width: 36px; height: 34px; border-radius: 10px; border: 1px solid var(--cizgi); background: var(--yuzey); color: var(--yazi); cursor: pointer; font-weight: 600; }
+.sayfa-no[aria-pressed="true"] { background: var(--vurgu); color: var(--vurgu-yazi); border-color: var(--vurgu); }
+.baslangic select { flex: 1; border: 1px solid var(--cizgi); background: var(--yuzey); border-radius: 10px; padding: 8px 10px; font-size: 15px; }
 .parca-ekle { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .parca-ekle .ikincil { padding: 7px 12px; font-size: 13px; }
 .foto-alan { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--cizgi); border-radius: 12px; }
