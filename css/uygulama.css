@@ -43,6 +43,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .sekmeler button, .tema button, .segment button { border: 0; background: none; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--soluk); }
 .sekmeler button[aria-current="page"], .tema button[aria-pressed="true"], .segment button[aria-checked="true"] { background: var(--vurgu); color: var(--vurgu-yazi); font-weight: 500; }
 :is(.sekmeler, .tema, .segment) button:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 2px; }
+.sekmeler .kit-bag { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--soluk); text-decoration: none; white-space: nowrap; }
+.sekmeler .kit-bag:hover { color: var(--yazi); background: var(--yuzey2); }
+.sekmeler .kit-bag:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 2px; }
 
 /* üret: masaüstünde form solda, önizleme sağda */
 .uret { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; grid-template-areas: "panel sahne"; gap: 24px; padding: 24px; max-width: 1400px; margin: 0 auto; }

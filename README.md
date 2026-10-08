@@ -5,6 +5,9 @@ içeriği yaz, kaydet. Telefonda ve bilgisayarda tarayıcıdan çalışır; ana 
 
 **Kullan:** https://d4gsed4t.github.io/bmt-icerik-uretim/
 
+**Kendin tasarlayacaksan marka kiti:** [son sürüm](https://github.com/d4gsed4t/bmt-icerik-uretim/releases/latest)
+(logo, renk, ikon, zemin, bileşen, Lexend, 58 şablonun yazısız ve yazılı hâli; ZIP) ve kullanım kılavuzu (PDF).
+
 ## Lisanslar
 
 - Lexend yazı tipi: SIL Open Font License 1.1
